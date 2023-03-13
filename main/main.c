@@ -1,37 +1,53 @@
+/* SD card and FAT filesystem example.
+   This example uses SPI peripheral to communicate with SD card.
+
+   This example code is in the Public Domain (or CC0 licensed, at your option.)
+
+   Unless required by applicable law or agreed to in writing, this
+   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+   CONDITIONS OF ANY KIND, either express or implied.
+*/
+
 #include <string.h>
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
 #include <sys/unistd.h>
 #include <sys/stat.h>
-#include "driver/sdspi_host.h"
+#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
 
+#define EXAMPLE_MAX_CHAR_SIZE    64
 
+static const char *TAG = "example";
 
-#define PIN_NUM_MISO 2
-#define PIN_NUM_MOSI 15
-#define PIN_NUM_CLK  14
-#define PIN_NUM_CS   13
+#define MOUNT_POINT "/sdcard"
 
-#define PUNTO_MONTAJE "/sdcard" //nombre de la SD
-#define MOUNT_POINT (PUNTO_MONTAJE)
-#define EXAMPLE_MAX_CHAR_SIZE 64
+// Pin assignments can be set in menuconfig, see "SD SPI Example Configuration" menu.
+// You can also change the pin assignments here by changing the following 4 lines.
+#define PIN_NUM_MISO  CONFIG_EXAMPLE_PIN_MISO
+#define PIN_NUM_MOSI  CONFIG_EXAMPLE_PIN_MOSI
+#define PIN_NUM_CLK   CONFIG_EXAMPLE_PIN_CLK
+#define PIN_NUM_CS    CONFIG_EXAMPLE_PIN_CS
 
-static esp_err_t  escribirArchivo(const char *path, char *data){
+static esp_err_t s_example_write_file(const char *path, char *data)
+{
+    ESP_LOGI(TAG, "Opening file %s", path);
     FILE *f = fopen(path, "w");
     if (f == NULL) {
-        printf("Failed to open file for writing");
+        ESP_LOGE(TAG, "Failed to open file for writing");
         return ESP_FAIL;
     }
     fprintf(f, data);
     fclose(f);
+    ESP_LOGI(TAG, "File written");
+
     return ESP_OK;
 }
 
-static esp_err_t  leerArchivo (const char *path){
-    printf("Reading file %s", path);
+static esp_err_t s_example_read_file(const char *path)
+{
+    ESP_LOGI(TAG, "Reading file %s", path);
     FILE *f = fopen(path, "r");
     if (f == NULL) {
-        printf("Failed to open file for reading");
+        ESP_LOGE(TAG, "Failed to open file for reading");
         return ESP_FAIL;
     }
     char line[EXAMPLE_MAX_CHAR_SIZE];
@@ -43,15 +59,15 @@ static esp_err_t  leerArchivo (const char *path){
     if (pos) {
         *pos = '\0';
     }
-    printf("Read from file: '%s'", line);
-    return ESP_OK;
+    ESP_LOGI(TAG, "Read from file: '%s'", line);
 
+    return ESP_OK;
 }
 
 void app_main(void)
 {
     esp_err_t ret;
-    sdspi_dev_handle_t SDcardhandle;
+
     // Options for mounting the filesystem.
     // If format_if_mount_failed is set to true, SD card will be partitioned and
     // formatted in case when mounting fails.
@@ -66,34 +82,17 @@ void app_main(void)
     };
     sdmmc_card_t *card;
     const char mount_point[] = MOUNT_POINT;
-    printf("Initializing SD card\n");
+    ESP_LOGI(TAG, "Initializing SD card");
 
     // Use settings defined above to initialize SD card and mount FAT filesystem.
     // Note: esp_vfs_fat_sdmmc/sdspi_mount is all-in-one convenience functions.
     // Please check its source code and implement error recovery when developing
     // production applications.
-    printf("Using SPI peripheral\n");
+    ESP_LOGI(TAG, "Using SPI peripheral");
 
-
-    // This initializes the slot without card detect (CD) and write protect (WP) signals.
-    // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
-   // Firstly, use the macro SDSPI_DEVICE_CONFIG_DEFAULT to initialize a structure sdspi_device_config_t, which is used to initialize an SD SPI device
-    
-    
-    /*  
-    slot_config.gpio_cd =  ; 
-    slot_config.gpio_wp =  ;
-    slot_config.gpio_int=  ;
-     */
-
-    
-
-
-        // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
+    // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
     // For setting a specific frequency, use host.max_freq_khz (range 400kHz - 20MHz for SDSPI)
     // Example: for fixed frequency of 10MHz, use host.max_freq_khz = 10000;
-    //Then use SDSPI_HOST_DEFAULT macro to initialize a sdmmc_host_t structure
-
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 
     spi_bus_config_t bus_cfg = {
@@ -104,45 +103,32 @@ void app_main(void)
         .quadhd_io_num = -1,
         .max_transfer_sz = 4000,
     };
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    //modify the host an pins 
-
-    slot_config.gpio_cs = PIN_NUM_CS;
-    //modify hosid and pins
-    slot_config.host_id = host.slot;
-
-
-    //Then call sdspi_host_init_device to initialize the SD SPI device and attach to its bus.
-    //Modify the slot parameter of the structure to the SD SPI device spi_handle just returned from sdspi_host_init_device
-    spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
-    //sdspi_host_init_device(&slot_config, &SDcardhandle);
-
-    //Call sdmmc_card_init with the sdmmc_host_t to probe and initialize the SD card.
-    //sdmmc_card_init(host,card);
-
-    /*
     ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
     if (ret != ESP_OK) {
-        printf("Failed to initialize bus.");
+        ESP_LOGE(TAG, "Failed to initialize bus.");
         return;
     }
 
-*/
+    // This initializes the slot without card detect (CD) and write protect (WP) signals.
+    // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = PIN_NUM_CS;
+    slot_config.host_id = host.slot;
 
-    printf("Mounting filesystem\n");
-    esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
-/*
+    ESP_LOGI(TAG, "Mounting filesystem");
+    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
+
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
-            printf("Failed to mount filesystem. "
+            ESP_LOGE(TAG, "Failed to mount filesystem. "
                      "If you want the card to be formatted, set the CONFIG_EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
         } else {
-            printf("Failed to initialize the card (%s). "
+            ESP_LOGE(TAG, "Failed to initialize the card (%s). "
                      "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
         }
         return;
-    }*/
-    printf("Filesystem mounted");
+    }
+    ESP_LOGI(TAG, "Filesystem mounted");
 
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, card);
@@ -150,15 +136,15 @@ void app_main(void)
     // Use POSIX and C standard library functions to work with files.
 
     // First create a file.
-    const char *file_hello = PUNTO_MONTAJE"/hello.txt";
+    const char *file_hello = MOUNT_POINT"/hello.txt";
     char data[EXAMPLE_MAX_CHAR_SIZE];
     snprintf(data, EXAMPLE_MAX_CHAR_SIZE, "%s %s!\n", "Hello", card->cid.name);
-    ret = escribirArchivo(file_hello, data);
+    ret = s_example_write_file(file_hello, data);
     if (ret != ESP_OK) {
         return;
     }
 
-    const char *file_foo = PUNTO_MONTAJE"/foo.txt";
+    const char *file_foo = MOUNT_POINT"/foo.txt";
 
     // Check if destination file exists before renaming
     struct stat st;
@@ -168,49 +154,48 @@ void app_main(void)
     }
 
     // Rename original file
-    printf("Renaming file %s to %s", file_hello, file_foo);
+    ESP_LOGI(TAG, "Renaming file %s to %s", file_hello, file_foo);
     if (rename(file_hello, file_foo) != 0) {
-        printf("Rename failed");
+        ESP_LOGE(TAG, "Rename failed");
+        return;
     }
 
-    ret = leerArchivo(file_foo);
+    ret = s_example_read_file(file_foo);
     if (ret != ESP_OK) {
         return;
     }
 
     // Format FATFS
-/*
-     ret = esp_vfs_fat_sdcard_format(mount_point, card);
-        if (ret != ESP_OK) {
-        printf("Failed to format FATFS (%s)", esp_err_to_name(ret));
+    ret = esp_vfs_fat_sdcard_format(mount_point, card);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to format FATFS (%s)", esp_err_to_name(ret));
         return;
     }
-    */
 
     if (stat(file_foo, &st) == 0) {
-        printf("file still exists");
+        ESP_LOGI(TAG, "file still exists");
         return;
     } else {
-        printf("file doesnt exist, format done");
+        ESP_LOGI(TAG, "file doesnt exist, format done");
     }
 
-    const char *file_nihao = PUNTO_MONTAJE"/nihao.txt";
+    const char *file_nihao = MOUNT_POINT"/nihao.txt";
     memset(data, 0, EXAMPLE_MAX_CHAR_SIZE);
     snprintf(data, EXAMPLE_MAX_CHAR_SIZE, "%s %s!\n", "Nihao", card->cid.name);
-    ret = escribirArchivo(file_nihao, data);
+    ret = s_example_write_file(file_nihao, data);
     if (ret != ESP_OK) {
         return;
     }
 
     //Open file for reading
-    ret = leerArchivo(file_nihao);
+    ret = s_example_read_file(file_nihao);
     if (ret != ESP_OK) {
         return;
     }
 
     // All done, unmount partition and disable SPI peripheral
     esp_vfs_fat_sdcard_unmount(mount_point, card);
-    printf("Card unmounted");
+    ESP_LOGI(TAG, "Card unmounted");
 
     //deinitialize the bus after all devices are removed
     spi_bus_free(host.slot);
